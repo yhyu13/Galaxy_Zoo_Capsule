@@ -9,7 +9,7 @@ GALAXY_ORIG_FOLDER = './data/images_training_rev1/'
 DF_TRAIN = pd.read_csv(GALAXY_TRAIN_FILE,names=['ID','label'])
 DF_TEST = pd.read_csv(GALAXY_TEST_FILE,names=['ID','label'])
 
-OFF_SET = 20
+OFF_SET = 50
 
 def galaxy_train_next_batch(batch_size):
     df_samples = DF_TRAIN.sample(batch_size)
@@ -95,6 +95,14 @@ if __name__=='__main__':
     from time import sleep
     mm_train_iter = multigalaxy_train_iter(iters=10)
     for img_mmtrain,_ in mm_train_iter:
+        fig = plt.figure()
+        ax1 = fig.add_subplot(131)
         img_mmtrain_sample = img_mmtrain[0,:,:,0]
-        plt.imshow(img_mmtrain_sample)
+        ax1.imshow(img_mmtrain_sample)
+        ax2 = fig.add_subplot(132)
+        img_mmtrain_sample = img_mmtrain[0,:,:,1]
+        ax2.imshow(img_mmtrain_sample)
+        ax3 = fig.add_subplot(133)
+        img_mmtrain_sample = img_mmtrain[0,:,:,2]
+        ax3.imshow(img_mmtrain_sample)
         plt.show()
