@@ -1,45 +1,53 @@
 import tensorflow as tf
-from ops import *
+from tensorflow.python.training import moving_averages
+import numpy as np
 
 class CapsNet(object):
-    def __init__(self,routing_iterations = 3,batch_size=32,is_multi_mnist=False,beta1=0.9):
+    def __init__(self,routing_iterations = 3,batch_size=32,is_multi_galaxy=False,beta1=0.9):
+
         self.iterations = routing_iterations
         self.batch_size = batch_size
-        self.is_multi_mnist = float(is_multi_mnist)
+        self.is_multi_galaxy = float(is_multi_galaxy)
+        self.is_training = tf.placeholder(tf.bool)
 
         self.x = tf.placeholder(tf.float32, [None, 212, 212, 3])
-        self.h_sample = tf.placeholder(tf.float32, [None, 2, 16])
+        self.h_sample = tf.placeholder(tf.float32, [None, 2, 32])
         self.y_sample = tf.placeholder(tf.float32, [None, 2])
         self.y = tf.placeholder(tf.float32, [None, 2, 3])
         self.lr = tf.placeholder(tf.float32)
+        self._extra_train_ops = []
 
         x_composed, x_a, x_b = tf.split(self.x,num_or_size_splits=3,axis=3)
         y_composed, y_a, y_b = tf.split(self.y,num_or_size_splits=3,axis=2)
 
-        valid_mask = self.is_multi_mnist * (tf.reduce_sum(y_composed, axis=[1,2]) - 1.0) \
-                      + (1.0 - self.is_multi_mnist) * tf.ones_like(y_composed[:,0,0])
+        valid_mask = self.is_multi_galaxy * (tf.reduce_sum(y_composed, axis=[1,2])) \
+                      + (1.0 - self.is_multi_galaxy) * tf.ones_like(y_composed[:,0,0])
 
         v_digit,c = self.get_CapsNet(x_composed)
         length_v = tf.reduce_sum(v_digit ** 2.0, axis=-1) ** 0.5  # length_v with shape [batch_size,10]
 
-        x_rec_a = self.get_mlp_decoder(v_digit * y_a)
-        x_rec_b = self.get_mlp_decoder(v_digit * y_b,reuse=True)
+        x_rec_a = self.get_deconv_decoder(v_digit * y_a)
+        x_rec_b = self.get_deconv_decoder(v_digit * y_b,reuse=True)
         loss_rec_a = tf.reduce_sum((x_rec_a - x_a) ** 2.0, axis=[1, 2, 3])
         loss_rec_b = tf.reduce_sum((x_rec_b - x_b) ** 2.0, axis=[1, 2, 3])
         self.loss_rec = (loss_rec_a + loss_rec_b) / 2.0
         self.x_recs = [x_rec_a,x_rec_b]
-        self.x_sample = self.get_mlp_decoder(self.h_sample * self.y_sample[:, :, None], reuse=True)
+        self.x_sample = self.get_deconv_decoder(self.h_sample * self.y_sample[:, :, None], reuse=True)
         self.loss_cls = tf.reduce_sum(y_composed[:,:,0] * tf.maximum(0.0, 0.9 - length_v) ** 2.0
                                       + 0.5 * (1.0 - y_composed[:,:,0]) * tf.maximum(0.0, length_v - 0.1) ** 2.0,axis=-1)
         self.loss_cls = tf.reduce_sum(self.loss_cls*valid_mask)/tf.reduce_sum(valid_mask)
         self.loss_rec = tf.reduce_sum(self.loss_rec*valid_mask)/tf.reduce_sum(valid_mask)
-        self.loss = self.loss_cls + 0.0005*self.loss_rec
+        self.loss = self.loss_cls # + 0.0005*self.loss_rec
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr,beta1=beta1)
+        grads_vars= self.optimizer.compute_gradients(self.loss)
+        apply_op = self.optimizer.apply_gradients(grads_vars)
+        train_ops = [apply_op] + self._extra_train_ops
+        # Group all updates to into a single train op.
+        self.train = tf.group(*train_ops)
 
-        self.train = tf.train.AdamOptimizer(learning_rate=self.lr,beta1=beta1).minimize(self.loss)
-
-        if is_multi_mnist:
-            self.accuracy = tf.reduce_mean(tf.cast(tf.nn.in_top_k(length_v,tf.argmax(tf.squeeze(y_a), 1),k=2),tf.float32))+\
-                            tf.reduce_mean(tf.cast(tf.nn.in_top_k(length_v,tf.argmax(tf.squeeze(y_b), 1),k=2),tf.float32))
+        if is_multi_galaxy:
+            self.accuracy = tf.reduce_mean(tf.cast(tf.nn.in_top_k(length_v,tf.argmax(tf.squeeze(y_a), 1),k=1),tf.float32))+\
+                            tf.reduce_mean(tf.cast(tf.nn.in_top_k(length_v,tf.argmax(tf.squeeze(y_b), 1),k=1),tf.float32))
             self.accuracy /= 2.0
             #this may be different from the paper
         else:
@@ -49,20 +57,21 @@ class CapsNet(object):
     def get_CapsNet(self,x,reuse = False):
 
         with tf.variable_scope('init'):
-            # deconvlution output should be [-1,212,212,1]
-            self.deconvlution_shape = [x.get_shape().as_list()[:-1]+[1]]
+            # x has shape [-1,212,212,3],
+            # deconvlution output should be [-1,212,212,1] instead of [-1,212,212,3]
+            self.deconvlution_shape = [x.get_shape().as_list()[1:-1]+[1]]
             x = self._batch_norm('init_bn', x)
             x = self._conv('init_conv', x, 5, 1, 128, self._stride_arr(3), padding='VALID')
             x = self._relu(x)
             tf.logging.info('image after init {}'.format(x.get_shape()))
-            self.deconvlution_shape = [x.get_shape().as_list()] + self.deconvlution_shape
+            self.deconvlution_shape = [x.get_shape().as_list()[1:]] + self.deconvlution_shape
 
         with tf.variable_scope('init2'):
             x = self._batch_norm('init_bn', x)
             x = self._conv('init_conv', x, 5, 128, 256, self._stride_arr(3), padding='VALID')
             x = self._relu(x)
             tf.logging.info('image after init {}'.format(x.get_shape()))
-            self.deconvlution_shape = [x.get_shape().as_list()] + self.deconvlution_shape
+            self.deconvlution_shape = [x.get_shape().as_list()[1:]] + self.deconvlution_shape
 
         with tf.variable_scope('primal_capsules'):
             x = self._batch_norm('primal_capsules_bn', x)
@@ -70,7 +79,7 @@ class CapsNet(object):
 
             capsules_dims = 16
             num_capsules = np.prod(x.get_shape().as_list()[1:]) // capsules_dims
-            self.deconvlution_shape = [x.get_shape().as_list()] + self.deconvlution_shape
+            self.deconvlution_shape = [x.get_shape().as_list()[1:]] + self.deconvlution_shape
 
             x = tf.reshape(x, [-1, num_capsules, capsules_dims])
             x = self._squash(x, axis=-1)
@@ -83,7 +92,7 @@ class CapsNet(object):
             """
             params_shape = [num_capsules, capsules_dims, 64, 8]
             x,_ = self._capsule_layer(x, params_shape=params_shape,
-                                         num_routing=self.hps.num_routing, name='digital_capsule')
+                                         num_routing=self.iterations, name='digital_capsule')
 
         with tf.variable_scope('digital_capsules_2'):
             """
@@ -92,18 +101,27 @@ class CapsNet(object):
             """
             params_shape = [64, 8, 2, 32]
             v, c = self._capsule_layer(x, params_shape=params_shape,
-                                         num_routing=self.hps.num_routing, name='digital_capsule')
+                                         num_routing=self.iterations, name='digital_capsule')
         return v, c
 
-    def get_mlp_decoder(self,h,reuse=False):
+    def get_deconv_decoder(self,h,reuse=False):
+        batch_size = tf.shape(h)[0]
+        if batch_size is None:
+            batch_size = self.batch_size
         h = tf.reshape(h,[-1,2*32])
         with tf.variable_scope('decoder',reuse=reuse):
-            h = self._fully_connected(h, 64*8)
-            h = self._fully_connected(h, np.prod(self.deconvlution_shape[0][1:]))
-            h = tf.reshape(h, self.deconvlution_shape[0])
-            h = tf.nn.conv2d_transpose(h, [5,5,256,256],self.deconvlution_shape[1], stride=[1,3,3,1],padding='VALID')
-            h = tf.nn.conv2d_transpose(h, [5,5,128,256],self.deconvlution_shape[2], stride=[1,3,3,1],padding='VALID')
-            h = tf.nn.conv2d_transpose(h, [5,5,1,128],self.deconvlution_shape[3], stride=[1,3,3,1],padding='VALID')
+            h = self._fully_connected(h, 64*8, name='fc1')
+            h = self._fully_connected(h, np.prod(self.deconvlution_shape[0]), name='fc2')
+            h = tf.reshape(h, [batch_size]+self.deconvlution_shape[0])
+
+            kernel1 = tf.get_variable('DW1', [5,5,256,256],tf.float32, initializer=tf.truncated_normal_initializer(stddev=np.sqrt(2.0 / (256+256))))
+            h = tf.nn.conv2d_transpose(h, kernel1, output_shape=tf.stack([batch_size]+self.deconvlution_shape[1]), strides=[1,3,3,1],padding='VALID')
+
+            kernel2 = tf.get_variable('DW2', [5,5,128,256],tf.float32, initializer=tf.truncated_normal_initializer(stddev=np.sqrt(2.0 / (256+128))))
+            h = tf.nn.conv2d_transpose(h, kernel2, output_shape=tf.stack([batch_size]+self.deconvlution_shape[2]), strides=[1,3,3,1],padding='VALID')
+
+            kernel3 = tf.get_variable('DW3', [5,5,1,128],tf.float32, initializer=tf.truncated_normal_initializer(stddev=np.sqrt(2.0 / (128))))
+            h = tf.nn.conv2d_transpose(h, kernel3, output_shape=tf.stack([batch_size]+self.deconvlution_shape[3]), strides=[1,3,3,1],padding='VALID')
         return h
 
     def _capsule_layer(self, x, params_shape, num_routing, name=''):
@@ -178,7 +196,7 @@ class CapsNet(object):
                 'moving_mean', params_shape, tf.float32,
                 initializer=tf.constant_initializer(0.0, tf.float32),
                 trainable=False)
-            moving_variance = tf.get_variable(get_mlp_decoder
+            moving_variance = tf.get_variable(
                 'moving_variance', params_shape, tf.float32,
                 initializer=tf.constant_initializer(1.0, tf.float32),
                 trainable=False)
@@ -188,10 +206,6 @@ class CapsNet(object):
             self._extra_train_ops.append(
                 moving_averages.assign_moving_average(
                     moving_variance, variance, 0.99))
-
-            if self.hps.hist_summary:
-                tf.summary.histogram(moving_mean.op.name, moving_mean)
-                tf.summary.histogram(moving_variance.op.name, moving_variance)
 
             def train():
                 # elipson used to be 1e-5. Maybe 0.001 solves NaN problem in deeper net.
