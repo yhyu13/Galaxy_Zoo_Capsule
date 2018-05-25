@@ -9,9 +9,9 @@ num_show = 5
 is_multi_galaxy = True
 is_shift_ag = True
 irun = 0
-lr = 0.001
+lr = 5e-4
 steps = 100000
-save_frequence = 10000
+save_frequence = 5000
 decay_frequence = 5000
 is_show_multi_rec = False
 is_show_sample = False
@@ -35,7 +35,8 @@ init = tf.initialize_all_variables()
 
 sess = tf.Session()
 writer = tf.summary.FileWriter("./sum",sess.graph)
-saver = tf.train.Saver()
+var_to_save = [var for var in tf.global_variables() if ('Adam' not in var.name) and ('Momentum' not in var.name)]
+saver = tf.train.Saver(var_list=var_to_save, max_to_keep=10)
 
 sess.run(init)
 
@@ -49,8 +50,9 @@ for X,Y in train_iter:
     writer.add_summary(result, irun)
 
     # print('{},{},{},{},{}'.format(irun, LS, LS_REC, ACC, ACC_TEST))
-    print('{}, LS: {:.5f}, Train ACC:{:.3f}, Test ACC: {:.3f}'.format(irun, LS, ACC, ACC_TEST))
+    print('{}, LS: {:.4f}, Train ACC:{:.3f}, Test ACC: {:.3f}'.format(irun, LS, ACC, ACC_TEST))
 
+    """
     if is_show_sample:
         H_SAM = np.random.randn(num_show*2, 2, 32)
         H_SAM = H_SAM / (0.001 + np.sum(H_SAM ** 2.0, axis=-1, keepdims=True) ** 0.5)
@@ -78,13 +80,14 @@ for X,Y in train_iter:
         key = cv2.waitKey(1)
 
     if key == ord('s'):
-        cv2.imwrite('MultigalaxyReconstruction%d.png' % irun, image_show * 255.0)
+        cv2.imwrite('MultigalaxyReconstruction%d.png' % irunloss_reconstruction_on_test_set, image_show * 255.0)
         cv2.imwrite('SampleFromH%d.png' % irun, images_sample * 255.0)
+    """
 
-    if irun+1 % save_frequence == 0:
-        saver.restore(sess, tf.train.get_checkpoint_state('./cpt/').model_checkpoint_path)
+    if (irun+1) % save_frequence == 0:
+        saver.save(sess, './cpt/model-{}.ckpt'.format(irun+1))
 
-    if irun+1 % decay_frequence == 0 and lr > min_lr:
+    if (irun+1) % decay_frequence == 0 and lr > min_lr:
         lr *= 0.5
 
     irun += 1

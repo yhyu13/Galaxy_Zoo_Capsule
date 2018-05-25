@@ -11,8 +11,8 @@ DF_TEST = pd.read_csv(GALAXY_TEST_FILE,names=['ID','label'])
 
 OFF_SET = 50
 
-def galaxy_train_next_batch(batch_size):
-    df_samples = DF_TRAIN.sample(batch_size)
+# get data batch
+def get_img_label(df_samples, batch_size):
     images = np.zeros([batch_size, 212, 212, 1])
     labels = np.zeros([batch_size,2])
     images_id = list(df_samples['ID'])
@@ -25,22 +25,16 @@ def galaxy_train_next_batch(batch_size):
         else:
             labels[i][1] = 1
     return images, labels
+
+def galaxy_train_next_batch(batch_size):
+    df_samples = DF_TRAIN.sample(batch_size)
+    return get_img_label(df_samples, batch_size)
 
 def galaxy_test_next_batch(batch_size):
     df_samples = DF_TEST.sample(batch_size)
-    images = np.zeros([batch_size, 212, 212, 1])
-    labels = np.zeros([batch_size,2])
-    images_id = list(df_samples['ID'])
-    images_label = list(df_samples['label'])
-    for i in range(batch_size):
-        filename = GALAXY_ORIG_FOLDER + '%d' % images_id[i] + '.jpg'
-        images[i] = np.asarray(cv2.resize(cv2.imread(filename,0),(212,212))).reshape((212,212,1))
-        if images_label[i] == 0:
-            labels[i][0] = 1
-        else:
-            labels[i][1] = 1
-    return images, labels
+    return get_img_label(df_samples, batch_size)
 
+# argument data with shift offsets
 def augmentation(x,max_offset=2):
     bz,h,w,c = x.shape
     bg = np.zeros([bz,w+2*max_offset,h+2*max_offset,c])
@@ -48,6 +42,7 @@ def augmentation(x,max_offset=2):
     bg[:,offsets[0]:offsets[0]+h,offsets[1]:offsets[1]+w,:] = x
     return bg[:,max_offset:max_offset+h,max_offset:max_offset+w,:]
 
+# training & testing generators
 def galaxy_train_iter(iters=1000,batch_size=32,is_shift_ag=True):
     max_offset = int(is_shift_ag) * OFF_SET
     for i in range(iters):

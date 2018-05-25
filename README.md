@@ -21,3 +21,17 @@ To install cv2 in Anaconda (optional):
 Or via pip:
 
 ```pip install opencv-python```
+
+## Datat set
+
+Small galaxy zoo is available at [https://www.kaggle.com/c/galaxy-zoo-the-galaxy-challenge/data](https://www.kaggle.com/c/galaxy-zoo-the-galaxy-challenge/data). I downloaded and used only the training images and training labels.
+
+To see how I select images that has either elliptical or sprial galaxies, checkout the jupyter notebook in ```data``` folder.
+
+To see how does the overlapping work, chekcout the ```python galaxy_data.py``` once you have the data set ready.
+
+## Train & Test
+
+Simply,
+
+```python galaxy_main.py```
