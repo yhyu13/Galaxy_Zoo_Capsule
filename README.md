@@ -22,16 +22,24 @@ Or via pip:
 
 ```pip install opencv-python```
 
-## Datat set
+## Data set
 
 Small galaxy zoo is available at [https://www.kaggle.com/c/galaxy-zoo-the-galaxy-challenge/data](https://www.kaggle.com/c/galaxy-zoo-the-galaxy-challenge/data). I downloaded and used only the training images and training labels.
 
-To see how I select images that has either elliptical or sprial galaxies, checkout the jupyter notebook in ```data``` folder.
+To see how I select images that has either elliptical or sprial galaxies, checkout the jupyter notebook in ```data``` folder. Every images is resized to 212x212 pixels.
 
-To see how does the overlapping work, chekcout the ```python galaxy_data.py``` once you have the data set ready.
+To see how does the overlapping work, checkout the ```python galaxy_data.py``` once you have the data set ready. Every overlapping images is made from two randomly selected galaxies images with lower or equal to 50 piexls offest on both axises from their center. The label of each galaxy image is a one hot vector with two elements represent either it is elliptical or spiral, the synthesized label is made from the result of ```logical or``` operation.
 
 ## Train & Test
 
 Simply,
 
 ```python galaxy_main.py```
+
+## Result
+
+![](./fig/err_test.png)
+
+After 90,000 batch iterations (32 overlapping images per batch), the model reaches around 30% error rate on the test data set. I retrain the model twice and it spits out the same result.
+
+In comparison to [https://github.com/yhyu13/tf_CapsNet](https://github.com/laodar/tf_CapsNet), which is a project done on synthesized hand written digits images and is the project I mimicked , the CapsNet achieve 10% error rate on test data set. The lesson learned is that  CpasNet is capable of recognizing elliptical and spiral galaxies when they overlapped but not as good as recognizing hand written digits. One challenge I realized was the reconstruction is particularly hard for large image input, thus, this model is not trained with reconstruction error.

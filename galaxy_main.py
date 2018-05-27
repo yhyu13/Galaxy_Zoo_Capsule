@@ -9,9 +9,9 @@ num_show = 5
 is_multi_galaxy = True
 is_shift_ag = True
 irun = 0
-lr = 5e-4
+lr = 1e-3
 steps = 100000
-save_frequence = 5000
+save_frequence = 2500
 decay_frequence = 5000
 is_show_multi_rec = False
 is_show_sample = False
@@ -27,20 +27,34 @@ else:
 multi_iter = multigalaxy_test_iter(iters=steps,batch_size=num_show,is_shift_ag = True)
 
 tf.reset_default_graph()
+tf.set_random_seed(1234)
 net = CapsNet(is_multi_galaxy=is_multi_galaxy)
 tf.summary.scalar('error_rate_on_test_set', (1.0 - net.accuracy) * 100.0)
 tf.summary.scalar('loss_reconstruction_on_test_set', net.loss_rec)
 merged = tf.summary.merge_all()
-init = tf.initialize_all_variables()
+init = tf.global_variables_initializer()
 
-sess = tf.Session()
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+#config.gpu_options.per_process_gpu_memory_fraction = 0.33
+sess = tf.Session(config=config)
 writer = tf.summary.FileWriter("./sum",sess.graph)
 var_to_save = [var for var in tf.global_variables() if ('Adam' not in var.name) and ('Momentum' not in var.name)]
 saver = tf.train.Saver(var_list=var_to_save, max_to_keep=10)
 
 sess.run(init)
 
+RESTORE = False
+if RESTORE:
+    try:
+        ckpt = tf.train.get_checkpoint_state('./cpt')
+        saver.restore(sess, ckpt.model_checkpoint_path)
+        print('Loading model succeeded...')
+    except:
+        print('Loading model failed or model doest not exist')
+
 for X,Y in train_iter:
+
     X_TEST, Y_TEST = test_iter.__next__()
 
     # LS, LS_REC, ACC, _ = sess.run([net.loss, net.loss_rec, net.accuracy, net.train], feed_dict={net.x: X, net.y: Y, net.lr: lr, net.is_training:True})
