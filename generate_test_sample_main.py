@@ -33,4 +33,4 @@ for X,Y in train_iter:
         cv2.imwrite(folder+img_name, imgs_T[0])
         i = i + 1
     for labels in Y:
-        outF.write(str(int(labels[0][0]))+','+str(int(labels[0][1]))+'\n')
+        outF.write(str(int(labels[0][0]))+','+str(int(labels[1][0]))+'\n')

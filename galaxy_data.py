@@ -85,7 +85,35 @@ def multigalaxy_test_iter(iters=1000,batch_size=32,is_shift_ag=True):
         y0 = np.logical_or(y1,y2).astype(np.float32)
         yield images, np.stack([y0,y1,y2], axis=-1)
 
+def multigalaxy_train_iter_alexnet(iters=1000,batch_size=32,is_shift_ag=True):
+    max_offset = int(is_shift_ag) * OFF_SET
+    for i in range(iters):
+        batch1 = galaxy_train_next_batch(batch_size)
+        batch2 = galaxy_train_next_batch(batch_size)
+        images1 = augmentation(batch1[0],max_offset)
+        images2 = augmentation(batch2[0],max_offset)
+        images = np.clip(np.add(images1,images2),0,255)
+        images = cv2.cvtColor(images,cv2.COLOR_GRAY2RGB).astype(np.float32) # convert to RGB from grayscale
+        y1,y2 = batch1[1],batch2[1]
+        y0 = np.logical_or(y1,y2).astype(np.float32)
+        yield images, y0
+
+
+def multigalaxy_test_iter_alexnet(iters=1000,batch_size=32,is_shift_ag=True):
+    max_offset = int(is_shift_ag) * OFF_SET
+    for i in range(iters):
+        batch1 = galaxy_test_next_batch(batch_size)
+        batch2 = galaxy_test_next_batch(batch_size)
+        images1 = augmentation(batch1[0],max_offset)
+        images2 = augmentation(batch2[0],max_offset)
+        images = np.clip(np.add(images1,images2),0,255)
+        images = cv2.cvtColor(images,cv2.COLOR_GRAY2RGB).astype(np.float32) # convert to RGB from grayscale
+        y1,y2 = batch1[1],batch2[1]
+        y0 = np.logical_or(y1,y2).astype(np.float32)
+        yield images, y0
+
 if __name__=='__main__':
+    # funtionality test
     import matplotlib.pyplot as plt
     from time import sleep
     mm_train_iter = multigalaxy_train_iter(iters=10)
