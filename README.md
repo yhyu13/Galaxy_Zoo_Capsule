@@ -40,7 +40,11 @@ Simply,
 
 ![](./fig/err_test.png)
 
-After 90,000 batch iterations (32 overlapping images per batch), the model reaches around 30% error rate on the test data set. I retrain the model twice and it spits out the same result.
+After 90,000 batch iterations (32 overlapping images per batch) with 1e-4 learning rate, the model reaches around 30% error rate on the test data set. I retrain the model twice and it spits out the same result.
+
+Below is another learning curve for 1e-3 learning rate achieve achieve the same performace in 10,000 batch iterations
+
+![](./fig/err_test2.png)
 
 In comparison to [https://github.com/yhyu13/tf_CapsNet](https://github.com/laodar/tf_CapsNet), which is a project done on synthesized hand written digits images and is the project I mimicked , the CapsNet achieve 10% error rate on test data set. The lesson learned is that  CpasNet is capable of recognizing elliptical and spiral galaxies when they overlapped but not as good as recognizing hand written digits. One challenge I realized was the reconstruction is particularly hard for large image input, thus, this model is not trained with reconstruction error.
 
