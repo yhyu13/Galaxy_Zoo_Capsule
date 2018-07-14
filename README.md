@@ -38,7 +38,7 @@ Simply,
 
 ## Result
 
-![](./fig/err_test.png)
+![](./fig/err_test1.png)
 
 After 90,000 batch iterations (32 overlapping images per batch) with 1e-4 learning rate, the model reaches around 30% error rate on the test data set. I retrain the model twice and it spits out the same result.
 
