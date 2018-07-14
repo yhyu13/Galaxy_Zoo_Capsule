@@ -1,10 +1,12 @@
 import numpy as np
 import pandas as pd
 import cv2
+import sys
 
 GALAXY_TRAIN_FILE = './data/train_simple.txt'
 GALAXY_TEST_FILE = './data/test_simple.txt'
 GALAXY_ORIG_FOLDER = './data/images_training_rev1/'
+GALAXY_TRAIN_FOLDER = './data/train_samples/'
 
 DF_TRAIN = pd.read_csv(GALAXY_TRAIN_FILE,names=['ID','label'])
 DF_TEST = pd.read_csv(GALAXY_TEST_FILE,names=['ID','label'])
@@ -26,13 +28,27 @@ def get_img_label(df_samples, batch_size):
             labels[i][1] = 1
     return images, labels
 
-def galaxy_train_next_batch(batch_size):
-    df_samples = DF_TRAIN.sample(batch_size)
-    return get_img_label(df_samples, batch_size)
+def get_img_label_alexnet(df_samples, batch_size):
+    images = np.zeros([batch_size, 224, 224, 3])
+    labels = np.zeros([batch_size,2])
+    images_id = list(df_samples['ID'])
+    images_label = list(df_samples['label'])
+    for i in range(batch_size):
+        filename = GALAXY_ORIG_FOLDER + '%d' % images_id[i] + '.jpg'
+        images[i] = np.asarray(cv2.resize(cv2.cvtColor(cv2.imread(filename,0),cv2.COLOR_GRAY2RGB),(224,224))).reshape((224,224,3))
+        if images_label[i] == 0:
+            labels[i][0] = 1
+        else:
+            labels[i][1] = 1
+    return images, labels
 
-def galaxy_test_next_batch(batch_size):
+def galaxy_train_next_batch(batch_size, get_image_label_func=get_img_label):
+    df_samples = DF_TRAIN.sample(batch_size)
+    return get_image_label_func(df_samples, batch_size)
+
+def galaxy_test_next_batch(batch_size,  get_image_label_func=get_img_label):
     df_samples = DF_TEST.sample(batch_size)
-    return get_img_label(df_samples, batch_size)
+    return get_image_label_func(df_samples, batch_size)
 
 # argument data with shift offsets
 def augmentation(x,max_offset=2):
@@ -85,31 +101,58 @@ def multigalaxy_test_iter(iters=1000,batch_size=32,is_shift_ag=True):
         y0 = np.logical_or(y1,y2).astype(np.float32)
         yield images, np.stack([y0,y1,y2], axis=-1)
 
+
+# Code for 224x224x3 input size
+
+GALAXY_TRAIN_FOLDER =  './data/train_samples/'
+GALAXY_TRAIN_FILE = './data/train_samples/lens_parameters.txt'
+try:
+    DF_LABEL = pd.read_csv(GALAXY_TRAIN_FILE, names=['eplliptical','spiral'])
+    LIST_LABEL = DF_LABEL.values
+except FileNotFoundError:
+    print("Training dataset has not created yet!")
+
+# get data batch
+def get_img_label_alexnet2(start_index, batch_size):
+    images = np.zeros([batch_size, 224, 224, 3])
+    start_index = start_index * batch_size
+    for i in range(batch_size):
+        filename = GALAXY_TRAIN_FOLDER + "img" + '_' + "%07d" % (start_index+i+1) + '.jpg'
+        images[i] = np.asarray(cv2.imread(filename))
+    labels = LIST_LABEL[start_index:start_index+batch_size]
+    return images, labels
+
 def multigalaxy_train_iter_alexnet(iters=1000,batch_size=32,is_shift_ag=True):
     max_offset = int(is_shift_ag) * OFF_SET
     for i in range(iters):
-        batch1 = galaxy_train_next_batch(batch_size)
-        batch2 = galaxy_train_next_batch(batch_size)
-        images1 = augmentation(batch1[0],max_offset)
-        images2 = augmentation(batch2[0],max_offset)
-        images = np.clip(np.add(images1,images2),0,255)
-        images = cv2.cvtColor(images,cv2.COLOR_GRAY2RGB).astype(np.float32) # convert to RGB from grayscale
-        y1,y2 = batch1[1],batch2[1]
-        y0 = np.logical_or(y1,y2).astype(np.float32)
-        yield images, y0
+        yield get_img_label_alexnet2(i, batch_size)
 
-
-def multigalaxy_test_iter_alexnet(iters=1000,batch_size=32,is_shift_ag=True):
+# genreate versatile categories of data
+def multigalaxy_generate_sample_alexnet(iters=1000,batch_size=1,is_shift_ag=True, is_train = True):
     max_offset = int(is_shift_ag) * OFF_SET
+    coins = np.random.uniform(size=iters)
+    if is_train:
+        get_batch_func = galaxy_train_next_batch
+    else:
+        get_batch_func = galaxy_test_next_batch
     for i in range(iters):
-        batch1 = galaxy_test_next_batch(batch_size)
-        batch2 = galaxy_test_next_batch(batch_size)
+        batch1 = get_batch_func(batch_size, get_img_label_alexnet)
+        batch2 = get_batch_func(batch_size, get_img_label_alexnet)
         images1 = augmentation(batch1[0],max_offset)
         images2 = augmentation(batch2[0],max_offset)
-        images = np.clip(np.add(images1,images2),0,255)
-        images = cv2.cvtColor(images,cv2.COLOR_GRAY2RGB).astype(np.float32) # convert to RGB from grayscale
         y1,y2 = batch1[1],batch2[1]
-        y0 = np.logical_or(y1,y2).astype(np.float32)
+        if coins[i] < 0.25:
+            images = np.clip(np.add(images1,images2),0,255).astype(np.float32)
+            y0 = np.logical_or(y1,y2).astype(np.float32)
+        elif 0.25 <= coins[i] < 0.5:
+            images = images1
+            y0 = y1
+        elif 0.5 <= coins[i] < 0.75:
+            images = images2
+            y0 = y2
+        else:
+            images = np.asarray([255 * np.random.random((224,224,3))])
+            y0 = np.zeros([1,2])
         yield images, y0
 
 if __name__=='__main__':

@@ -49,3 +49,9 @@ In comparison to [https://github.com/yhyu13/tf_CapsNet](https://github.com/laoda
 - [ ] Spiral, elliptical, irregular galaxies classification (and more diversed sythesized images)
 - [ ] Find best threshold for FS/FN
 - [ ] Train with AlexNet
+- [ ] Change the method to generate training data: should be
+
+(i) spiral only (no synthesized image)
+(ii) elliptical only (no synthesized image)
+(iii) synthesized images
+(iv) false negative examples
