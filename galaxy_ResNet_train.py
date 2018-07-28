@@ -70,14 +70,14 @@ if RESTORE:
 
 # Train
 irun = 0
-for _ in range(50):
+for epoch in range(50):
 
     train_iter = multigalaxy_train_iter_alexnet(iters=steps,batch_size=batch_size,is_shift_ag = True)
 
     for X,Y in train_iter:
 
         if len(Y) != batch_size: 
-            print("Done epoch!")    
+            print("==========Done epoch %d!==========" % (epoch))    
             break
             
         LS, ACC, result, _ = sess.run([loss, error_rate, merged, train], feed_dict={inputs: X, target: Y, dynamic_lr: lr})

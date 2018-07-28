@@ -5,8 +5,11 @@ import numpy as np
 import os
 import sys
 from galaxy_data import *
+import tensorflow.contrib.slim as slim
+from tensorflow.contrib.slim.nets import resnet_v1
 
 batch_size = 32
+num_class = 2
 num_show = 5
 is_multi_galaxy = True
 is_shift_ag = True
@@ -15,14 +18,27 @@ is_show_multi_rec = False
 is_show_sample = False
 key = -1
 
+# Build computaional graph
 tf.reset_default_graph()
 tf.set_random_seed(1234)
-net = CapsNet(is_multi_galaxy=is_multi_galaxy)
-tf.summary.scalar('error_rate_on_test_set', (1.0 - net.accuracy) * 100.0)
-tf.summary.scalar('loss_reconstruction_on_test_set', net.loss_rec)
+
+inputs = tf.placeholder(tf.float32, shape=(None,224,224,3))
+target = tf.placeholder(tf.float32, [None, num_class])
+dynamic_lr = tf.placeholder(tf.float32, shape=())
+
+with slim.arg_scope(resnet_v1.resnet_arg_scope()):
+   net, end_points = resnet_v1.resnet_v1_50(inputs, num_class, is_training=False)
+   # net has shape (?,1,1,2), so use squeeze to reduce to (?,2)
+   net = tf.squeeze(net)
+
+loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=net, labels=target))
+
+prediction_prob = tf.nn.sigmoid(net)
+tf.summary.scalar('loss', loss)
 merged = tf.summary.merge_all()
 init = tf.global_variables_initializer()
 
+# Build Session
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 config.gpu_options.per_process_gpu_memory_fraction = 0.33
@@ -58,6 +74,7 @@ outF = open(GALAXY_TEST_RESULT_FILE, "w+")
 
 # grid search from 0.1 to 0.9
 grid_prob = [i/100.0 for i in range(10,100,10)]
+# grid_prob = [0.5]
 
 fp_counter = 0
 fn_counter = 0
@@ -68,13 +85,12 @@ for prob_fp in grid_prob:
         fp_counter = 0
         fn_counter = 0
 
-        for i in range(1000):
+        for i in range(100):
             filename = GALAXY_TEST_FOLDER + "img" + '_' + "%07d" % (i+1) + '.png'
-            img = np.asarray(cv2.imread(filename,0))
-            img = np.asarray([img,img,img])
-            img = np.transpose(img, (1,2,0))
-            pred_length = sess.run([net.length_v], feed_dict={net.x: [img], net.is_training: False})
-            pred_length = pred_length[0][0]
+            img = np.asarray(cv2.resize(cv2.cvtColor(cv2.imread(filename,0),cv2.COLOR_GRAY2RGB),(224,224))).reshape((224,224,3))
+            logits, pred_length = sess.run([net, prediction_prob], feed_dict={inputs: [img]})
+            pred_length = pred_length[0]
+            #print(pred_length)
             #print('Elliptical - {:.2f}/{} | Spiral - {:.2f}/{}'.format(pred_length[0], labels_elliptical[i], pred_length[1], labels_spiral[i]))
 
             false_positive = False

@@ -9,7 +9,7 @@ from galaxy_data import multigalaxy_generate_sample_alexnet
 batch_size = 10
 is_multi_galaxy = True
 is_shift_ag = True
-steps = 10000
+steps = 20000
 
 np.random.seed(1234)
 """

@@ -99,7 +99,7 @@ for X,Y in train_iter:
     """
 
     if (irun+1) % save_frequence == 0:
-        saver.save(sess, './cpt/model-{}.ckpt'.format(irun+1))
+        saver.save(sess, './cpt/model2-{}.ckpt'.format(irun+1))
 
     if (irun+1) % decay_frequence == 0 and lr > min_lr:
         lr *= 0.5

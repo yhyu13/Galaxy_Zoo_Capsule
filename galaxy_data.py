@@ -1,3 +1,9 @@
+"""
+Special Note: Small Galaxy Zoo images are written in .jpg extension
+              Opencv images don't support .jpg, so they are written in .png extension
+
+"""
+
 import numpy as np
 import pandas as pd
 import cv2
@@ -113,19 +119,19 @@ except FileNotFoundError:
     print("Training dataset has not created yet!")
 
 # get data batch
-def get_img_label_alexnet2(start_index, batch_size):
+def get_img_label_alexnetV2(start_index, batch_size):
     images = np.zeros([batch_size, 224, 224, 3])
     start_index = start_index * batch_size
     for i in range(batch_size):
-        filename = GALAXY_TRAIN_FOLDER + "img" + '_' + "%07d" % (start_index+i+1) + '.jpg'
-        images[i] = np.asarray(cv2.imread(filename))
+        filename = GALAXY_TRAIN_FOLDER + "img" + '_' + "%07d" % (start_index+i+1) + '.png'
+        images[i] = np.asarray(cv2.resize(cv2.cvtColor(cv2.imread(filename,0),cv2.COLOR_GRAY2RGB),(224,224))).reshape((224,224,3))
     labels = LIST_LABEL[start_index:start_index+batch_size]
     return images, labels
 
 def multigalaxy_train_iter_alexnet(iters=1000,batch_size=32,is_shift_ag=True):
     max_offset = int(is_shift_ag) * OFF_SET
     for i in range(iters):
-        yield get_img_label_alexnet2(i, batch_size)
+        yield get_img_label_alexnetV2(i, batch_size)
 
 # genreate versatile categories of data
 def multigalaxy_generate_sample_alexnet(iters=1000,batch_size=1,is_shift_ag=True, is_train = True):
@@ -141,6 +147,7 @@ def multigalaxy_generate_sample_alexnet(iters=1000,batch_size=1,is_shift_ag=True
         images1 = augmentation(batch1[0],max_offset)
         images2 = augmentation(batch2[0],max_offset)
         y1,y2 = batch1[1],batch2[1]
+        """
         if coins[i] < 0.25:
             images = np.clip(np.add(images1,images2),0,255).astype(np.float32)
             y0 = np.logical_or(y1,y2).astype(np.float32)
@@ -153,22 +160,25 @@ def multigalaxy_generate_sample_alexnet(iters=1000,batch_size=1,is_shift_ag=True
         else:
             images = np.asarray([255 * np.random.random((224,224,3))])
             y0 = np.zeros([1,2])
+        """
+        if coins[i] < 0.5:
+            images = np.clip(np.add(images1,images2),0,255).astype(np.float32)
+            y0 = np.logical_or(y1,y2).astype(np.float32)
+        elif 0.5 <= coins[i] < 0.75:
+            images = images1
+            y0 = y1
+        else:
+            images = images2
+            y0 = y2
+            
         yield images, y0
 
 if __name__=='__main__':
     # funtionality test
     import matplotlib.pyplot as plt
-    from time import sleep
-    mm_train_iter = multigalaxy_train_iter(iters=10)
-    for img_mmtrain,_ in mm_train_iter:
-        fig = plt.figure()
-        ax1 = fig.add_subplot(131)
-        img_mmtrain_sample = img_mmtrain[0,:,:,0]
-        ax1.imshow(img_mmtrain_sample)
-        ax2 = fig.add_subplot(132)
-        img_mmtrain_sample = img_mmtrain[0,:,:,1]
-        ax2.imshow(img_mmtrain_sample)
-        ax3 = fig.add_subplot(133)
-        img_mmtrain_sample = img_mmtrain[0,:,:,2]
-        ax3.imshow(img_mmtrain_sample)
+    train = multigalaxy_train_iter_alexnet(10, 1)
+    for img, label in train:
+        print(label)
+        plt.figure()
+        plt.imshow(img[0].astype(int))
         plt.show()
