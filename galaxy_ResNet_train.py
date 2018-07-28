@@ -70,13 +70,13 @@ if RESTORE:
 
 # Train
 irun = 0
-for epoch in range(50):
+for epoch in range(1):
 
     train_iter = multigalaxy_train_iter_alexnet(iters=steps,batch_size=batch_size,is_shift_ag = True)
 
-    for X,Y in train_iter:
+    for X,Y,err in train_iter:
 
-        if len(Y) != batch_size: 
+        if len(Y) != batch_size or err: 
             print("==========Done epoch %d!==========" % (epoch))    
             break
             

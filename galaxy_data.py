@@ -122,11 +122,16 @@ except FileNotFoundError:
 def get_img_label_alexnetV2(start_index, batch_size):
     images = np.zeros([batch_size, 224, 224, 3])
     start_index = start_index * batch_size
+    err = False
     for i in range(batch_size):
         filename = GALAXY_TRAIN_FOLDER + "img" + '_' + "%07d" % (start_index+i+1) + '.png'
-        images[i] = np.asarray(cv2.resize(cv2.cvtColor(cv2.imread(filename,0),cv2.COLOR_GRAY2RGB),(224,224))).reshape((224,224,3))
+        img = cv2.imread(filename,0)
+        if img is not None:
+            images[i] = np.asarray(cv2.resize(cv2.cvtColor(img,cv2.COLOR_GRAY2RGB),(224,224))).reshape((224,224,3))
+        else:
+            err = True
     labels = LIST_LABEL[start_index:start_index+batch_size]
-    return images, labels
+    return images, labels, err
 
 def multigalaxy_train_iter_alexnet(iters=1000,batch_size=32,is_shift_ag=True):
     max_offset = int(is_shift_ag) * OFF_SET

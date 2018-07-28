@@ -89,9 +89,9 @@ for prob_fp in grid_prob:
             filename = GALAXY_TEST_FOLDER + "img" + '_' + "%07d" % (i+1) + '.png'
             img = np.asarray(cv2.resize(cv2.cvtColor(cv2.imread(filename,0),cv2.COLOR_GRAY2RGB),(224,224))).reshape((224,224,3))
             logits, pred_length = sess.run([net, prediction_prob], feed_dict={inputs: [img]})
-            pred_length = pred_length[0]
+            #pred_length = pred_length[0]
             #print(pred_length)
-            #print('Elliptical - {:.2f}/{} | Spiral - {:.2f}/{}'.format(pred_length[0], labels_elliptical[i], pred_length[1], labels_spiral[i]))
+            print('Elliptical - {:.2f}/{} | Spiral - {:.2f}/{}'.format(pred_length[0], labels_elliptical[i], pred_length[1], labels_spiral[i]))
 
             false_positive = False
             false_negative = False
