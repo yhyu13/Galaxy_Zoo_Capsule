@@ -70,7 +70,7 @@ if RESTORE:
 
 # Train
 irun = 0
-for epoch in range(1):
+for epoch in range(10):
 
     train_iter = multigalaxy_train_iter_alexnet(iters=steps,batch_size=batch_size,is_shift_ag = True)
 
