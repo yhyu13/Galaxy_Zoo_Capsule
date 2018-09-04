@@ -4,17 +4,42 @@ Special Note: Small Galaxy Zoo images are written in .jpg extension
 
 """
 
+import sys
+import os
+
 import numpy as np
 import pandas as pd
 import cv2
 import matplotlib.pyplot as plt
-import sys
+
+from tqdm import tqdm
 
 GALAXY_IMG_FOLDER =  './v0828new/'
 GALAXY_IMG_ID_FILE = './v0828overlap-id.txt'
 GALAXY_TRAIN_IMG_ID_FILE = './v0828overlap-train-id.txt'
 GALAXY_TEST_IMG_ID_FILE = './v0828overlap-test-id.txt'
 GALAXY_IMG_LABEL_FILE = './v0828overlap-catalog.txt'
+
+GALAXY_TRAIN_IMG_FOLDER = './v0904/train_img/'
+GALAXY_TRAIN_LABEL_FOLDER = './v0904/train_label/'
+GALAXY_TEST_IMG_FOLDER = './v0904/test_img/'
+GALAXY_TEST_LABEL_FOLDER = './v0904/test_label/'
+
+if not os.path.exists('./v0904/'):
+    os.makedirs('./v0904/')
+    
+if not os.path.exists(GALAXY_TRAIN_IMG_FOLDER):
+    os.makedirs(GALAXY_TRAIN_IMG_FOLDER)
+    
+if not os.path.exists(GALAXY_TRAIN_LABEL_FOLDER):
+    os.makedirs(GALAXY_TRAIN_LABEL_FOLDER)
+    
+if not os.path.exists(GALAXY_TEST_IMG_FOLDER):
+    os.makedirs(GALAXY_TEST_IMG_FOLDER)
+    
+if not os.path.exists(GALAXY_TEST_LABEL_FOLDER):
+    os.makedirs(GALAXY_TEST_LABEL_FOLDER)
+
 try:
     DF_IMG_ID = pd.read_csv(GALAXY_IMG_ID_FILE, names=['ID'])
     LIST_IMG_ID = DF_IMG_ID.values.flatten()
@@ -45,17 +70,33 @@ def train_test_split(x):
 ###
 #  Main Function to generate training/testing dataset
 ###
-def generate_train_img_label(is_train=True,additional_label=1):
+def generate_train_img_label(is_train=True,additional_label=0):
 
     if is_train:
         iters = len(LIST_TRAIN_IMG_ID)
+        img_folder = GALAXY_TRAIN_IMG_FOLDER
+        label_folder = GALAXY_TRAIN_LABEL_FOLDER
     else:
         iters = len(LIST_TEST_IMG_ID)
-    
-    for i in iters:
-        img,label = get_img_label(i, is_train, additional_label)
-
-
+        img_folder = GALAXY_TEST_IMG_FOLDER
+        label_folder = GALAXY_TEST_LABEL_FOLDER
+        
+    iters = 1
+    for i in tqdm(range(iters)):
+        img,labels = get_img_label(i, is_train, additional_label)
+        img_id = LIST_TRAIN_IMG_ID[i][:-5]
+        for action in range(8):
+            img_0, labels_0 = dihedral_transform(img,labels,action=action)
+            for corner in range(4):
+                img_1, labels_1 = corp_img(img_0, labels_0, corp_ratio=3./4, corner=corner)
+                if len(labels_1) >= 1:
+                    img_name = '{}_action{}_corner{}'.format(img_id,action,corner)
+                    cv2.imwrite(img_folder + img_name + '.png', img_1)
+                    with open(label_folder + img_name + '.txt', 'w+') as f:
+                        for l in labels_1:
+                            f.write('{} {} {} {} {}\n'.format(*l))
+                
+            
 ###
 #  Get the source image and label for the ith image in the train/test text file
 #  Can have additional label for non-overlapping galaxies (ordered by area)
@@ -166,73 +207,96 @@ def dihedral_transform(img_0,labels_0,action:0):
         print("Dihedral group action should be in range [0,7]")
     
     return img, labels
-        
-    
 
-def augmentationV2(x,max_offset=50):
-    bz,h,w,c = x.shape
-    bg = np.zeros([bz,w+2*max_offset,h+2*max_offset,c])
-    offsets = np.random.randint(0,2*max_offset+1,2)
-    bg[:,offsets[0]:offsets[0]+h,offsets[1]:offsets[1]+w,:] = x
-    return bg[:,max_offset:max_offset+h,max_offset:max_offset+w,:], offsets
+###
+#  Corp Image By four corners (Upper Left, Upper Right, Lower Left, Lower Right)
+###        
+def corp_img(img, labels, corp_ratio=3./4, corner=0):
+    img_h, img_w = img.shape[:-1]
+    img_corp_h, img_corp_w = int(img_h*corp_ratio), int(img_w*corp_ratio)
+    img_0 = img.copy()
+    labels_0 = labels.copy()
+    new_labels = np.asarray([])
     
+    if corner == 0: # upper left
+        img_0 = img_0[:img_corp_h,:img_corp_w]
+        for l in labels_0:
+            x,y,h,w = l[1:]
+            x,y,h,w = x*img_h,y*img_w,h*img_h,w*img_w
+            # Is label still valid in the corpped image?
+            if x < img_corp_h and y < img_corp_w:
+                if x + h > img_corp_h:
+                    h = img_corp_h - x
+                if y + w > img_corp_w:
+                    w = img_corp_w - y
+                    
+                x,y,h,w = x/img_corp_h,y/img_corp_w,h/img_corp_h,w/img_corp_w
+                if len(new_labels) == 0:
+                    new_labels = np.append(new_labels, [l[0],x,y,h,w])
+                else:
+                    new_labels = np.vstack((new_labels, [l[0],x,y,h,w]))
+                
+    elif corner == 1: # lower right
+        img_0 = img_0[img_h-img_corp_h:,img_w-img_corp_w:]
+        for l in labels_0:
+            x,y,h,w = l[1:]
+            x,y,h,w = x*img_h,y*img_w,h*img_h,w*img_w
+            # Is label still valid in the corpped image?
+            if x >= img_h-img_corp_h and y >= img_w-img_corp_w:
+                x -= img_h-img_corp_h
+                y -= img_w-img_corp_w
+                
+                x,y,h,w = x/img_corp_h,y/img_corp_w,h/img_corp_h,w/img_corp_w
+                if len(new_labels) == 0:
+                    new_labels = np.append(new_labels, [l[0],x,y,h,w])
+                else:
+                    new_labels = np.vstack((new_labels, [l[0],x,y,h,w]))
+                
+    elif corner == 2: # upper right
+        img_0 = img_0[:img_corp_w, img_w-img_corp_w:]
+        for l in labels_0:
+            x,y,h,w = l[1:]
+            x,y,h,w = x*img_h,y*img_w,h*img_h,w*img_w
+            # Is label still valid in the corpped image?
+            if x >= img_h-img_corp_h and y < img_corp_w:
+                x -= img_h-img_corp_h
+                if y + w > img_corp_w:
+                    w = img_corp_w - y
+                    
+                x,y,h,w = x/img_corp_h,y/img_corp_w,h/img_corp_h,w/img_corp_w
+                if len(new_labels) == 0:
+                    new_labels = np.append(new_labels, [l[0],x,y,h,w])
+                else:
+                    new_labels = np.vstack((new_labels, [l[0],x,y,h,w]))
+                
+    elif corner == 3: # lower left
+        img_0 = img_0[img_h-img_corp_h:,:img_corp_h]
+        for l in labels_0:
+            x,y,h,w = l[1:]
+            x,y,h,w = x*img_h,y*img_w,h*img_h,w*img_w
+            # Is label still valid in the corpped image?
+            if x < img_corp_h and y >= img_w-img_corp_w:
+                if x + h > img_corp_h:
+                    h = img_corp_h - x
+                y -= img_w-img_corp_w
+                
+                x,y,h,w = x/img_corp_h,y/img_corp_w,h/img_corp_h,w/img_corp_w
+                if len(new_labels) == 0:
+                    new_labels = np.append(new_labels, [l[0],x,y,h,w])
+                else:
+                    new_labels = np.vstack((new_labels, [l[0],x,y,h,w]))
+    
+    # if only one label, expand its batch size dim
+    if len(new_labels) == 5:
+        new_labels = np.expand_dims(new_labels,axis=0)
         
-def multigalaxy_generate_sample_alexnetV3(is_shift_ag=True, is_train = True, noFN=True):
-    max_offset = int(is_shift_ag) * OFF_SET
-    coins = np.random.uniform(size=iters)
-    if is_train:
-        get_batch_func = galaxy_train_next_batch
-    else:
-        get_batch_func = galaxy_test_next_batch
-    for i in range(iters):
-        batch1 = get_batch_func(batch_size, get_img_labelV2)
-        batch2 = get_batch_func(batch_size, get_img_labelV2)
-        
-        images1, offset1 = augmentationV2(batch1[0],max_offset)
-        images2, offset2 = augmentationV2(batch2[0],max_offset)
-        y1,y2 = batch1[1][:,:2],batch2[1][:,:2]
-        bb1,bb2 = batch1[1][:,2:],batch2[1][:,2:]
-        #print(bb1,offset1,bb2,offset2)
-        bb1[:,0], bb1[:,1] = bb1[:,0]+offset1[0]-max_offset, bb1[:,1]+offset1[1]-max_offset
-        bb2[:,0], bb2[:,1] = bb2[:,0]+offset2[0]-max_offset, bb2[:,1]+offset2[1]-max_offset
-        # noFN means not including any False-Negative samples
-        images = np.clip(np.add(images1,images2),0,255).astype(np.float32)
-        y0 = np.logical_or(y1,y2).astype(np.float32)
-        bb0 = np.zeros_like(bb1)
-        bb0[:,0] = min(bb1[:,0],bb2[:,0])
-        bb0[:,1] = min(bb1[:,1],bb2[:,1])
-        bb0[:,2] = max(bb1[:,0]+bb1[:,2],bb2[:,0]+bb2[:,2]) - bb0[:,0]
-        bb0[:,3] = max(bb1[:,1]+bb1[:,3],bb2[:,1]+bb2[:,3]) - bb0[:,1]
-        
-        batch3 = get_batch_func(batch_size, get_img_labelV2)
-        images3 = batch3[0]
-        
-        images0 = np.zeros_like(images)
-        size = images0.shape[1]
-        
-        resize2 = np.random.randint(low=size//2,high=size)
-        x2,y2 = np.random.randint(size-resize2), np.random.randint(size-resize2)
-        images3 = cv2.resize(images3[0],(resize2,resize2))
-        
-        resize1 = np.random.randint(low=size//5,high=size//2)
-        x1,y1 = np.random.randint(size-resize1), np.random.randint(size-resize1)
-        images = cv2.resize(images[0],(resize1,resize1))
-        
-        
-        
-        images0[:,x2:x2+resize2,y2:y2+resize2] += images3
-        images0[:,x1:x1+resize1,y1:y1+resize1] += images
-        
-        bb0 = bb0 * (resize1 / size)
-        bb0[:,0] += x1
-        bb0[:,1] += y1 
-            
-        yield images0, bb0, y0, bb1, y1, bb2,y2
+    return img_0, new_labels
 
 
 if __name__=='__main__':
     # funtionality test
-    
+    generate_train_img_label(is_train=True,additional_label=3)
+    """
     img, labels = get_img_label(index=0, is_train=True, additional_label=2)
     print(labels)
     colors = {0:(255,0,0),1:(0,255,0)}
@@ -250,6 +314,23 @@ if __name__=='__main__':
     plt.imshow(img_0.astype(int))
     plt.show()
     
+    for corner in range(4):
+        img_0, labels_0 = corp_img(img, labels, corp_ratio=3./4, corner=corner)
+        print(labels_0)
+        img_0 = img_0.copy()
+        for label in labels_0:
+            bb0 = label[1:].copy()
+            bb0[0] *= img_0.shape[0]
+            bb0[1] *= img_0.shape[1]
+            bb0[2] *= img_0.shape[0]
+            bb0[3] *= img_0.shape[1]
+            bb0 = [int(e) for e in bb0]
+            cv2.rectangle(img_0, (bb0[0],bb0[1]), (bb0[0]+bb0[2],bb0[1]+bb0[3]),colors[0], 0)
+            
+        plt.figure()
+        plt.imshow(img_0.astype(int))
+        plt.show()
+    
     for action in range(8):
         img_0, labels_0 = dihedral_transform(img,labels,action=action)
         print(labels_0)
@@ -266,3 +347,4 @@ if __name__=='__main__':
         plt.figure()
         plt.imshow(img_0.astype(int))
         plt.show()
+    """
