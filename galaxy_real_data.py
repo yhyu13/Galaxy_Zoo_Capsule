@@ -20,13 +20,14 @@ GALAXY_TRAIN_IMG_ID_FILE = './v0828overlap-train-id.txt'
 GALAXY_TEST_IMG_ID_FILE = './v0828overlap-test-id.txt'
 GALAXY_IMG_LABEL_FILE = './v0828overlap-catalog.txt'
 
+ROOT_FOLDER = './v0904/'
 GALAXY_TRAIN_IMG_FOLDER = './v0904/train_img/'
 GALAXY_TRAIN_LABEL_FOLDER = './v0904/train_label/'
 GALAXY_TEST_IMG_FOLDER = './v0904/test_img/'
 GALAXY_TEST_LABEL_FOLDER = './v0904/test_label/'
 
-if not os.path.exists('./v0904/'):
-    os.makedirs('./v0904/')
+if not os.path.exists(ROOT_FOLDER):
+    os.makedirs(ROOT_FOLDER)
     
 if not os.path.exists(GALAXY_TRAIN_IMG_FOLDER):
     os.makedirs(GALAXY_TRAIN_IMG_FOLDER)
@@ -66,37 +67,7 @@ def train_test_split(x):
     with open('./v0828overlap-test-id.txt','w+') as f:
         for ID in test:
             f.write(ID + '\n')
-            
-###
-#  Main Function to generate training/testing dataset
-###
-def generate_train_img_label(is_train=True,additional_label=0):
-
-    if is_train:
-        iters = len(LIST_TRAIN_IMG_ID)
-        img_folder = GALAXY_TRAIN_IMG_FOLDER
-        label_folder = GALAXY_TRAIN_LABEL_FOLDER
-    else:
-        iters = len(LIST_TEST_IMG_ID)
-        img_folder = GALAXY_TEST_IMG_FOLDER
-        label_folder = GALAXY_TEST_LABEL_FOLDER
-        
-    iters = 1
-    for i in tqdm(range(iters)):
-        img,labels = get_img_label(i, is_train, additional_label)
-        img_id = LIST_TRAIN_IMG_ID[i][:-5]
-        for action in range(8):
-            img_0, labels_0 = dihedral_transform(img,labels,action=action)
-            for corner in range(4):
-                img_1, labels_1 = corp_img(img_0, labels_0, corp_ratio=3./4, corner=corner)
-                if len(labels_1) >= 1:
-                    img_name = '{}_action{}_corner{}'.format(img_id,action,corner)
-                    cv2.imwrite(img_folder + img_name + '.png', img_1)
-                    with open(label_folder + img_name + '.txt', 'w+') as f:
-                        for l in labels_1:
-                            f.write('{} {} {} {} {}\n'.format(*l))
-                
-            
+     
 ###
 #  Get the source image and label for the ith image in the train/test text file
 #  Can have additional label for non-overlapping galaxies (ordered by area)
@@ -130,7 +101,7 @@ def get_bounding_box(image, additional_label=1,show_img=False):
         x,y,h,w = cv2.boundingRect(contours[i])
         area = h * w
         
-        if .90* img_h_2 < x + h/2 < 1.1* img_h_2 and .9* img_w_2 < y + w/2 < 1.1* img_w_2:
+        if .8* img_h_2 < x + h/2 < 1.2* img_h_2 and .80* img_w_2 < y + w/2 < 1.2* img_w_2:
             data[i] = [area,1,x/img_h,y/img_w,h/img_h,w/img_w]
         else:
             data[i] = [area,0,x/img_h,y/img_w,h/img_h,w/img_w]
@@ -285,6 +256,8 @@ def corp_img(img, labels, corp_ratio=3./4, corner=0):
                     new_labels = np.append(new_labels, [l[0],x,y,h,w])
                 else:
                     new_labels = np.vstack((new_labels, [l[0],x,y,h,w]))
+    else:
+        new_labels = labels
     
     # if only one label, expand its batch size dim
     if len(new_labels) == 5:
@@ -292,10 +265,46 @@ def corp_img(img, labels, corp_ratio=3./4, corner=0):
         
     return img_0, new_labels
 
+###
+#  Main Function to generate training/testing dataset
+###
+def generate_train_img_label(is_train=True,additional_label=0):
+
+    if is_train:
+        iters = len(LIST_TRAIN_IMG_ID)
+        img_folder = GALAXY_TRAIN_IMG_FOLDER
+        label_folder = GALAXY_TRAIN_LABEL_FOLDER
+        catalog = 'train_catalog.txt'
+    else:
+        iters = len(LIST_TEST_IMG_ID)
+        img_folder = GALAXY_TEST_IMG_FOLDER
+        label_folder = GALAXY_TEST_LABEL_FOLDER
+        catalog = 'test_catalog.txt'
+    
+    with open(ROOT_FOLDER + catalog, 'w+') as cat:
+        for i in tqdm(range(iters)):
+            img,labels = get_img_label(i, is_train, additional_label)
+            img_id = LIST_TRAIN_IMG_ID[i][:-5]
+            for action in range(8):
+                img_0, labels_0 = dihedral_transform(img,labels,action=action)
+                for corner in range(5):
+                    img_1, labels_1 = corp_img(img_0, labels_0, corp_ratio=3./4, corner=corner)
+                    if len(labels_1) >= 1:
+                        img_name = '{}_action{}_corner{}'.format(img_id,action,corner)
+                        # write image
+                        cv2.imwrite(img_folder + img_name + '.png', img_1)
+                        # write img name to catalog
+                        cat.write(img_name+'\n')
+                        # write label to text file
+                        with open(label_folder + img_name + '.txt', 'w+') as f:
+                            for l in labels_1:
+                                f.write('{} {} {} {} {}\n'.format(*l))
 
 if __name__=='__main__':
+    
+    generate_train_img_label(is_train=False,additional_label=3)
+    
     # funtionality test
-    generate_train_img_label(is_train=True,additional_label=3)
     """
     img, labels = get_img_label(index=0, is_train=True, additional_label=2)
     print(labels)
